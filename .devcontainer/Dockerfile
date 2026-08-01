@@ -96,7 +96,7 @@ RUN mkdir -p /usr/local/lib/hermes-agent \
     && rm -rf /tmp/hermes
 
 # ── Final stage ────────────────────────────────────────────────────────
-FROM mcr.microsoft.com/devcontainers/base:ubuntu
+FROM mcr.microsoft.com/devcontainers/base:ubuntu24.04
 
 # Tool versions — passed from workflow via --build-arg (single source of truth)
 ARG HERMES_VERSION
@@ -178,20 +178,10 @@ RUN apt-get update \
     && chmod a+rx /usr/share/ollama
 
 # ── Docker CLI (client only: docker, buildx, compose) ─────────────────
-# Talks to the host/remote daemon via DOCKER_HOST or the mounted socket.
-RUN install -m 0755 -d /etc/apt/keyrings \
-    && curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-        | gpg --dearmor --yes -o /etc/apt/keyrings/docker-archive-keyring.gpg \
-    && . /etc/os-release \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" \
-        > /etc/apt/sources.list.d/docker.list \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
-        docker-ce-cli \
-        docker-buildx-plugin \
-        docker-compose-plugin \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL  https://raw.githubusercontent.com/devcontainers/features/refs/heads/main/src/docker-in-docker/install.sh | bash
+
+# ── GH CLI ─────────────────
+RUN curl -fsSL  https://raw.githubusercontent.com/devcontainers/features/refs/heads/main/src/github-cli/install.sh | bash
 
 # ── Copy Node.js packages from builder stage ──────────────────────────
 COPY --from=node-builder /build/modelrelay/ /usr/local/lib/modelrelay/

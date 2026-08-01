@@ -96,7 +96,7 @@ RUN mkdir -p /usr/local/lib/hermes-agent \
     && rm -rf /tmp/hermes
 
 # ── Final stage ────────────────────────────────────────────────────────
-FROM mcr.microsoft.com/devcontainers/base:ubuntu
+FROM mcr.microsoft.com/devcontainers/base:ubuntu24.04
 
 # Tool versions — passed from workflow via --build-arg (single source of truth)
 ARG HERMES_VERSION
@@ -177,6 +177,12 @@ RUN apt-get update \
     # Ensure /usr/share/ollama itself is traversable by vscode user
     && chmod a+rx /usr/share/ollama
 
+# ── Docker CLI (client only: docker, buildx, compose) ─────────────────
+RUN curl -fsSL  https://raw.githubusercontent.com/devcontainers/features/refs/heads/main/src/docker-in-docker/install.sh | bash
+
+# ── GH CLI ─────────────────
+RUN curl -fsSL  https://raw.githubusercontent.com/devcontainers/features/refs/heads/main/src/github-cli/install.sh | bash
+
 # ── Copy Node.js packages from builder stage ──────────────────────────
 COPY --from=node-builder /build/modelrelay/ /usr/local/lib/modelrelay/
 COPY --from=node-builder /build/omniroute/ /usr/local/lib/omniroute/
@@ -244,6 +250,13 @@ RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/self-check.sh
 
 # ── Switch to non-root user (by UID, works with any username) ────────────
 USER 1000
+
+# Default to bash shell (other shells available at /usr/bin/fish and /usr/bin/zsh)
+ENV SHELL=/bin/bash \
+    DOCKER_BUILDKIT=1
+
+# Mount for docker-in-docker 
+VOLUME [ "/var/lib/docker" ]
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["sleep", "infinity"]

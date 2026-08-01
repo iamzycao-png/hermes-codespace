@@ -106,6 +106,7 @@ jobs:
             check "omniroute installed"       "command -v omniroute"
             check "modelrelay installed"      "command -v modelrelay"
             check "mnemon installed"          "command -v mnemon"
+            check "docker cli installed"      "command -v docker && docker --version"
             check "tailscale installed"       "command -v tailscale || true"
 
             check "zsh installed"             "command -v zsh"

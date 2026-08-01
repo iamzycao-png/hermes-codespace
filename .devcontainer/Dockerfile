@@ -177,6 +177,22 @@ RUN apt-get update \
     # Ensure /usr/share/ollama itself is traversable by vscode user
     && chmod a+rx /usr/share/ollama
 
+# ── Docker CLI (client only: docker, buildx, compose) ─────────────────
+# Talks to the host/remote daemon via DOCKER_HOST or the mounted socket.
+RUN install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+        | gpg --dearmor --yes -o /etc/apt/keyrings/docker-archive-keyring.gpg \
+    && . /etc/os-release \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" \
+        > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        docker-ce-cli \
+        docker-buildx-plugin \
+        docker-compose-plugin \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 # ── Copy Node.js packages from builder stage ──────────────────────────
 COPY --from=node-builder /build/modelrelay/ /usr/local/lib/modelrelay/
 COPY --from=node-builder /build/omniroute/ /usr/local/lib/omniroute/
@@ -244,6 +260,13 @@ RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/self-check.sh
 
 # ── Switch to non-root user (by UID, works with any username) ────────────
 USER 1000
+
+# Default to bash shell (other shells available at /usr/bin/fish and /usr/bin/zsh)
+ENV SHELL=/bin/bash \
+    DOCKER_BUILDKIT=1
+
+# Mount for docker-in-docker 
+VOLUME [ "/var/lib/docker" ]
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["sleep", "infinity"]

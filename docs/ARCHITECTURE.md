@@ -54,7 +54,7 @@ From the installed `pi-coding-agent` 0.84.2 source:
 - `model-runtime.js:461-468` — the real call path is
   `streamSimple(model, context, options)`; `Context` carries everything
   (messages, tools, thinking level, abort signal).
-- `@earendil-works/pi-ai/compat` already exports `isRetryableAssistantError`,
+- `@earendil-works/pi-ai` exports `isRetryableAssistantError`,
   `isRecoverableLength`, `isContextOverflow` — the exact classification logic we
   reuse so we never fight Pi's own retries.
 
@@ -169,7 +169,7 @@ fallbackStreamSimple(primaryModel, ctx, opts):
   that stream untouched. A fallback never interrupts a partially generated
   response → no duplicate tool calls.
 - **Reuse Pi's error classes.** Import `isRetryableAssistantError` /
-  `isContextOverflow` from `@earendil-works/pi-ai/compat`, so we fail over on the
+  `isContextOverflow` from `@earendil-works/pi-ai`, so we fail over on the
   *same* conditions Pi would classify as terminal, and let Pi retry on the *same*
   conditions it would retry.
 - **Timeout is orthogonal to Pi's retries.** The per-request first-token timeout
@@ -256,7 +256,53 @@ budget — the defining Hermes behavior.
 
 ---
 
-## 7. Risks & mitigations
+## 7. Implementation status
+
+### Files created
+
+```
+src/
+├── index.ts       # Main extension (452 lines) - exports proxyFirstToken, shouldFailover, createFailoverWrapper, default factory
+├── config.ts      # Configuration types & loader (87 lines)
+test/
+├── config.test.ts       # Config unit tests (8 tests)
+├── failover.test.ts     # Fault-injection tests (17 tests)
+dist/                 # Built output (npm run build)
+├── index.js / index.d.ts
+└── config.js / config.d.ts
+.github/workflows/ci.yml   # CI pipeline (lint, test, build)
+```
+
+### Exported functions (for testing)
+
+| Function | Purpose |
+|---|---|
+| `proxyFirstToken(stream, onFirstToken, onErrorBeforeFirstToken)` | Wraps stream, detects first token (text_delta, thinking_start, toolcall_start) |
+| `shouldFailover(error, config)` | Classifies error: AbortError/network/timeout → failover; retryable (429) → let Pi retry; non-retryable (4xx) / context overflow → failover |
+| `createFailoverWrapper(providerId, modelRegistry, config)` | Returns wrapped `streamSimple` that iterates fallback chain |
+| `loadFallbackConfigForProvider(providerId, modelRegistry)` | Reads `fallback` block from models.json via registry |
+| `parseFallbackConfig(providerConfig)` | Merges user config with defaults |
+
+### Test coverage (25 tests, all passing)
+
+```bash
+$ npx vitest run
+# Test Files  2 passed (2)
+# Tests  25 passed (25)
+```
+
+| Suite | Tests |
+|---|---|
+| Config loading | 8 |
+| Error classification (`shouldFailover`) | 6 |
+| First-token detection (`proxyFirstToken`) | 4 |
+| Fallback chain (`createFailoverWrapper`) | 2 |
+| Config integration | 2 |
+| **Total** | **25** |
+
+---
+
+## 8. Risks & mitigations
 
 - **Stream-proxy complexity** — wrapping `AssistantMessageEventStream` must
   faithfully forward all event types (text deltas, `tool_use`, thinking, finish)
@@ -272,7 +318,7 @@ budget — the defining Hermes behavior.
 
 ---
 
-## 8. Comparison with the `cad0p/pi-fallback-provider` review
+## 9. Comparison with the `cad0p/pi-fallback-provider` review
 
 Findings from the code review (kept for context):
 
@@ -285,13 +331,60 @@ Findings from the code review (kept for context):
 
 `pi-failover` deliberately avoids all of these: request-time hook, no required
 config to be safe (empty chain = pass-through), no TUI probe, no leaked
-listeners, explicit peer deps on `pi-coding-agent`/`pi-tui`.
+listeners, explicit peer deps on `pi-coding-agent`/`pi-ai`.
 
 ---
 
-## 9. Build plan (incremental)
+## 10. Build & verification commands
 
-1. `index.ts` — `registerProvider` + `streamSimple` wrapper skeleton + config loader.
-2. `test/` — fault-injection harness proving §6(A)/(C).
-3. Config schema + observability (§5/(D)).
-4. Package metadata for `pi install` + publish.
+```bash
+# Install deps
+npm ci
+
+# Type check
+npx tsc -p tsconfig.json --noEmit
+
+# Run all tests (25 tests)
+npx vitest run --reporter=verbose
+
+# Build extension
+npm run build
+
+# Verify build output
+ls -la dist/
+# index.js, index.d.ts, config.js, config.d.ts
+
+# Install locally for Pi
+pi install . --local --approve
+
+# Full local verification (matches CI)
+npx tsc -p tsconfig.json --noEmit && npx vitest run && npm run build
+```
+
+---
+
+## 11. CI / GitHub Actions
+
+`.github/workflows/ci.yml` defines:
+
+| Job | Trigger | Steps |
+|---|---|---|
+| `lint` | push/PR | `tsc --noEmit`, ESLint (if configured) |
+| `test` | push/PR | `vitest run --reporter=verbose` |
+| `build` | after lint+test | `npm run build`, verify `dist/` |
+| `integration` | manual | Optional Pi CLI integration (disabled) |
+
+Run locally before push:
+```bash
+npx tsc -p tsconfig.json --noEmit && npx vitest run && npm run build
+```
+
+---
+
+## 12. Build plan (incremental)
+
+1. ✅ `index.ts` — `registerProvider` + `streamSimple` wrapper skeleton + config loader.
+2. ✅ `test/` — fault-injection harness proving §6(A)/(C).
+3. ✅ Config schema + observability (§5/(D)).
+4. ✅ Package metadata for `pi install` + publish.
+5. 🔄 Optional: Integration test with real Pi CLI in CI (when environment available).
